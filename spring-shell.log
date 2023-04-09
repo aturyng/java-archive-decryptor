@@ -1,0 +1,9 @@
+1680891070816:hey
+1680891078524:gg
+1680891080482:exit
+1680891100943:df
+1680948271770:extract -inDir ddd
+1680948293168:extract --inDir ddd
+1680948297839:extract
+1680948375524:extract --inputDir dfdf
+1680953042005:extract --inDir /home/osboxes/sw_dev/java/testing/extractor_test_data/in --outDir /home/osboxes/sw_dev/java/testing/extractor_test_data/out --pwFile /home/osboxes/sw_dev/java/testing/extractor_test_data/passwords.txt --rem true
