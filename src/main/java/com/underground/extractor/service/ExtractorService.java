@@ -32,6 +32,7 @@ public class ExtractorService {
 
 
     public void extract(String inputDir, String outputDir, String passwordsFile, boolean removeAfterExtraction) {
+
         //read all password from the text file - line by line
         final List<String> allPasswords = new ArrayList<>();
         try {
@@ -53,25 +54,25 @@ public class ExtractorService {
                         //try each password
                         passwordsLoop:
                         for (String password : allPasswords) {
-                            boolean exctractionSucceeded;
+                            boolean extractionOK;
                             try {
                                 switch (extension) {
                                     case "7zip":
                                     case "7z":
-                                        exctractionSucceeded = sevenZipHandler.extractAll(currFile, password, outputDir);
+                                        extractionOK = sevenZipHandler.extractAll(currFile, password, outputDir);
                                         break;
                                     case "zip":
-                                        exctractionSucceeded = zipHandler.extractAll(currFile, password, outputDir);
+                                        extractionOK = zipHandler.extractAll(currFile, password, outputDir);
+                                        break;
+                                    case "rar":
+                                        extractionOK = rarHandler.extractAll(currPath.toFile(), password, outputDir);
                                         break;
                                     default:
                                         logger.warn("Unsupported file format: {}. Ignoring...", fileName);
                                         break passwordsLoop;
-                                    /*case "rar":
-                                        exctractionSucceeded = rarHandler.extractAll(currPath.toFile(), password, outputDir);
-                                        break;*/
                                 }
-                                if (exctractionSucceeded) {
-                                    logger.info("Successfully extracted {}", fileName);
+                                if (extractionOK) {
+                                    logger.info("Successfully finished extracting {}", fileName);
                                     if (removeAfterExtraction) {
                                         if (currPath.toFile().delete()) {
                                             logger.info("Successfully removed {}", fileName);
