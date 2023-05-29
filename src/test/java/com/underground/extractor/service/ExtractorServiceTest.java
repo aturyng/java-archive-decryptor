@@ -2,6 +2,7 @@ package com.underground.extractor.service;
 
 import com.underground.extractor.handler.RarHandler;
 import com.underground.extractor.handler.SevenZipHandler;
+import com.underground.extractor.handler.WrongPassException;
 import com.underground.extractor.handler.ZipHandler;
 import org.apache.commons.io.FileUtils;
 import org.junit.jupiter.api.AfterEach;
@@ -47,7 +48,7 @@ class ExtractorServiceTest {
         FileUtils.cleanDirectory(tempOutputDir.toFile());
         this.classLoader = getClass().getClassLoader();
         this.service = new ExtractorService(zipHandler, sevenZipHandler, rarHandler);
-        Stream.of("file.zip", "file.7z", "file.rar", "passwords.txt").forEach(fileName -> {
+        Stream.of("file.zip", "file.7z", "file.7z.001", "file.rar", "passwords.txt").forEach(fileName -> {
             Path newFilePath = Paths.get(tempInputDir.resolve(fileName).toUri());
             try {
                 Files.createFile(newFilePath);
@@ -72,18 +73,22 @@ class ExtractorServiceTest {
 
         File fileZip = tempInputDir.resolve("file.zip").toFile();
         File file7z = tempInputDir.resolve("file.7z").toFile();
+        File file7zMultipart = tempInputDir.resolve("file.7z.001").toFile();
         File fileRar = tempInputDir.resolve("file.rar").toFile();
 
         Assertions.assertTrue(fileZip.exists());
         Assertions.assertTrue(file7z.exists());
+        Assertions.assertTrue(file7zMultipart.exists());
         Assertions.assertTrue(fileRar.exists());
 
         String inputDir = tempInputDir.toAbsolutePath().toString();
         String outputDir = tempOutputDir.toAbsolutePath().toString();
         String passFilePath = passwordsFile.getAbsolutePath();
-        when(zipHandler.extractAll(fileZip,"12345", outputDir)).thenReturn(true);
-        when(sevenZipHandler.extractAll(file7z,"password", outputDir)).thenReturn(true);
-        when(rarHandler.extractAll(fileRar,"12345", outputDir)).thenReturn(true);
+        when(zipHandler.extractArchive(fileZip,"12345", outputDir)).thenReturn(true);
+        when(sevenZipHandler.extractArchive(file7z,"password", outputDir)).thenReturn(true);
+        when(sevenZipHandler.extractArchive(file7z,"12345", outputDir)).thenThrow(WrongPassException.class);
+        when(rarHandler.extractArchive(fileRar,"12345", outputDir)).thenReturn(true);
+        when(sevenZipHandler.extractMultipartArchive(file7zMultipart,"12345", outputDir)).thenReturn(true);
 
         //WHEN
         //we run the extractor
@@ -95,10 +100,11 @@ class ExtractorServiceTest {
 
 
         //THEN
-        //all files we have passwords for have been extracted
+        //all files we have passwords for have been deleted after extraction
         Assertions.assertFalse(fileZip.exists());
         Assertions.assertFalse(file7z.exists());
         Assertions.assertFalse(fileRar.exists());
+        Assertions.assertFalse(file7zMultipart.exists());
         //but password file should stay
         Assertions.assertTrue(passwordsFile.exists());
     }

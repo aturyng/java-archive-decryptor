@@ -48,7 +48,7 @@ public class ExtractorService {
                 public FileVisitResult visitFile(Path currPath, BasicFileAttributes attrs) {
                     if (!Files.isDirectory(currPath)) {
                         String fileName = currPath.getFileName().toString();
-                        String extension = FilenameUtils.getExtension(fileName);
+                        String extension = this.getExtension(fileName);
                         File currFile =  currPath.toFile();
                         int passwordsTried = 0;
                         //try each password
@@ -59,13 +59,16 @@ public class ExtractorService {
                                 switch (extension) {
                                     case "7zip":
                                     case "7z":
-                                        extractionOK = sevenZipHandler.extractAll(currFile, password, outputDir);
+                                        extractionOK = sevenZipHandler.extractArchive(currFile, password, outputDir);
+                                        break;
+                                    case "7z.001":
+                                        extractionOK = sevenZipHandler.extractMultipartArchive(currFile, password, outputDir);
                                         break;
                                     case "zip":
-                                        extractionOK = zipHandler.extractAll(currFile, password, outputDir);
+                                        extractionOK = zipHandler.extractArchive(currFile, password, outputDir);
                                         break;
                                     case "rar":
-                                        extractionOK = rarHandler.extractAll(currPath.toFile(), password, outputDir);
+                                        extractionOK = rarHandler.extractArchive(currPath.toFile(), password, outputDir);
                                         break;
                                     default:
                                         logger.warn("Unsupported file format: {}. Ignoring...", fileName);
@@ -96,6 +99,14 @@ public class ExtractorService {
                         }
                     }
                     return FileVisitResult.CONTINUE;
+                }
+
+                private String getExtension(String fileName) {
+                    var extention = FilenameUtils.getExtension(fileName);
+                    if (extention.equals("001")) {
+                        extention = FilenameUtils.getExtension(fileName.substring(0, fileName.length() - 4)) + ".001";
+                    }
+                    return extention;
                 }
             });
         } catch (IOException e) {

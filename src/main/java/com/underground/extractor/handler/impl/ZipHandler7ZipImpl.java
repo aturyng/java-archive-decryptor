@@ -7,6 +7,7 @@ import com.underground.extractor.handler.ZipHandler;
 import jakarta.annotation.PostConstruct;
 import net.sf.sevenzipjbinding.*;
 import net.sf.sevenzipjbinding.impl.RandomAccessFileInStream;
+import net.sf.sevenzipjbinding.impl.VolumedArchiveInStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -29,153 +30,12 @@ public class ZipHandler7ZipImpl implements ZipHandler, SevenZipHandler, RarHandl
         }
     }
 
-    static class ExtractionException extends Exception {
-        @Serial
-        private static final long serialVersionUID = -5108931481040742838L;
-
-        ExtractionException(String msg) {
-            super(msg);
-        }
-
-        public ExtractionException(String msg, Exception e) {
-            super(msg, e);
-        }
-    }
-
-    class ExtractCallback implements ICryptoGetTextPassword, IArchiveExtractCallback {
-        private final IInArchive inArchive;
-        private int index;
-        private OutputStream outputStream;
-        private File file;
-        private ExtractAskMode extractAskMode;
-        private boolean isFolder;
-
-        private final String password;
-
-        public String cryptoGetTextPassword() {
-            return password;
-        }
-
-        ExtractCallback(IInArchive inArchive, String password) {
-            this.inArchive = inArchive;
-            this.password = password;
-        }
-
-        @Override
-        public void setTotal(long total) throws SevenZipException {
-
-        }
-
-        @Override
-        public void setCompleted(long completeValue) throws SevenZipException {
-
-        }
-
-        @Override
-        public ISequentialOutStream getStream(int index,
-                                              ExtractAskMode extractAskMode) throws SevenZipException {
-            closeOutputStream();
-
-            this.index = index;
-            this.extractAskMode = extractAskMode;
-            this.isFolder = (Boolean) inArchive.getProperty(index,
-                    PropID.IS_FOLDER);
-
-            if (extractAskMode != ExtractAskMode.EXTRACT) {
-                // Skipped files or files being tested
-                return null;
-            }
-
-            String path = (String) inArchive.getProperty(index, PropID.PATH);
-            file = new File(outputDirectoryFile, path);
-            if (isFolder) {
-                createDirectory(file);
-                return null;
-            }
-
-            createDirectory(file.getParentFile());
-
-            try {
-                outputStream = new FileOutputStream(file);
-            } catch (FileNotFoundException e) {
-                throw new SevenZipException("Error opening file: "
-                        + file.getAbsolutePath(), e);
-            }
-
-            return data -> {
-                try {
-                    outputStream.write(data);
-                } catch (IOException e) {
-                    throw new SevenZipException("Error writing to file: "
-                            + file.getAbsolutePath());
-                }
-                return data.length; // Return amount of consumed data
-            };
-        }
-
-        private void createDirectory(File parentFile) throws SevenZipException {
-            if (!parentFile.exists()) {
-                if (!parentFile.mkdirs()) {
-                    throw new SevenZipException("Error creating directory: "
-                            + parentFile.getAbsolutePath());
-                }
-            }
-        }
-
-        private void closeOutputStream() throws SevenZipException {
-            if (outputStream != null) {
-                try {
-                    outputStream.close();
-                    outputStream = null;
-                } catch (IOException e) {
-                    throw new SevenZipException("Error closing file: "
-                            + file.getAbsolutePath());
-                }
-            }
-        }
-
-        @Override
-        public void prepareOperation(ExtractAskMode extractAskMode)
-                throws SevenZipException {
-
-        }
-
-        @Override
-        public void setOperationResult(ExtractOperationResult extractOperationResult)
-                throws SevenZipException {
-            closeOutputStream();
-            String path = (String) inArchive.getProperty(index, PropID.PATH);
-            boolean is7zDataErr = extractOperationResult == ExtractOperationResult.DATAERROR
-                    && inArchive.getArchiveFormat().equals(ArchiveFormat.SEVEN_ZIP);
-            if (extractOperationResult == ExtractOperationResult.WRONG_PASSWORD || is7zDataErr) {
-                throw new SevenZipException(ZipHandler7ZipImpl.EXCEPTION_MSG_WRONG_PASS);
-            }
-            if (extractOperationResult != ExtractOperationResult.OK) {
-                throw new SevenZipException("Invalid file: " + path);
-            }
-
-            if (!isFolder) {
-                switch (extractAskMode) {
-                    case EXTRACT:
-                        logger.info("Extracted " + path);
-                        break;
-                    case TEST:
-                        logger.info("Tested " + path);
-
-                    default:
-                }
-            }
-        }
-
-    }
-
     private String archive;
     private String outputDirectory;
-    private File outputDirectoryFile;
-    private boolean test = false;
+    public File outputDirectoryFile;
 
 
-    private void prepareOutputDirectory() throws ExtractionException {
+    private void prepareOutputDirectory()  {
         outputDirectoryFile = new File(outputDirectory);
         if (!outputDirectoryFile.exists()) {
             if (outputDirectoryFile.mkdirs()) {
@@ -188,22 +48,9 @@ public class ZipHandler7ZipImpl implements ZipHandler, SevenZipHandler, RarHandl
         }
     }
 
-
-    public void extractArchive(String password) throws ExtractionException, WrongPassException {
-
-        try (var randomAccessFile = new RandomAccessFile(archive, "r")) {
-            extractArchive(randomAccessFile, password);
-        }  catch (FileNotFoundException e) {
-            throw new ExtractionException("File not found", e);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-
-    private void extractArchive(RandomAccessFile file, String password) throws ExtractionException, WrongPassException {
-        try (var inArchive = SevenZip.openInArchive(null, new RandomAccessFileInStream(file), password)){
-            inArchive.extract(null, test, new ExtractCallback(inArchive, password));
+    private void doExtract(String password, IInStream streamProcessor) throws ExtractionException, WrongPassException {
+        try (var inArchive = SevenZip.openInArchive(null, streamProcessor, password)){
+            inArchive.extract(null, false, new ExtractCallback(this, inArchive, password));
         } catch (SevenZipException e) {
             //TODO check for error when opening archive
             if (e.getMessage().contains("Archive file can't be opened with any of the registered codecs")
@@ -229,12 +76,33 @@ public class ZipHandler7ZipImpl implements ZipHandler, SevenZipHandler, RarHandl
 
 
     @Override
-    public boolean extractAll(File archiveFile, String archivePassword, String outputDir) throws WrongPassException, ExtractionException {
+    public boolean extractArchive(File archiveFile, String archivePassword, String outputDir) throws WrongPassException, ExtractionException {
         this.archive = archiveFile.getAbsolutePath();
         this.outputDirectoryFile = new File(outputDir);
         this.outputDirectory = outputDir;
         prepareOutputDirectory();
-        extractArchive(archivePassword);
+
+        try (var file = new RandomAccessFile(archive, "r")) {
+            doExtract(archivePassword, new RandomAccessFileInStream(file));
+        }  catch (FileNotFoundException e) {
+            throw new ExtractionException("File not found", e);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return true;
+    }
+
+    @Override
+    public boolean extractMultipartArchive(File archiveFile, String archivePassword, String outputDir) throws WrongPassException, ExtractionException {
+        this.archive = archiveFile.getAbsolutePath();
+        this.outputDirectoryFile = new File(outputDir);
+        this.outputDirectory = outputDir;
+        prepareOutputDirectory();
+        try {
+            doExtract(archivePassword, new VolumedArchiveInStream(archive, new ArchiveOpenVolumeCallback()));
+        } catch (SevenZipException e) {//TODO
+            throw new RuntimeException(e);
+        }
         return true;
     }
 }
