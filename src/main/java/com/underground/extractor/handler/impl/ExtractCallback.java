@@ -36,8 +36,7 @@ class ExtractCallback implements ICryptoGetTextPassword, IArchiveExtractCallback
     }
 
     @Override
-    public ISequentialOutStream getStream(int index,
-                                          ExtractAskMode extractAskMode) throws SevenZipException {
+    public ISequentialOutStream getStream(int index, ExtractAskMode extractAskMode) throws SevenZipException {
         closeOutputStream();
 
         this.index = index;

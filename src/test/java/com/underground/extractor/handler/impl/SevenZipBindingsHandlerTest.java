@@ -43,9 +43,15 @@ class SevenZipBindingsHandlerTest {
         SINGLE, MULTIPLE, SINGLE_ENCR_LIST, MULTIPART_SINGLE
     }
 
-    private String getArchiveMask(FileType type) {
+    private String getArchiveMask(FileType type, String format) {
         return switch (type) {
-            case MULTIPART_SINGLE -> "single_file_inside.%s.001";
+            case MULTIPART_SINGLE -> {
+                if (format.equals("7z")) {
+                    yield "single_file_inside.%s.001";
+                } else {
+                    yield  "single_file_inside.part01.%s";
+                }
+            }
             case SINGLE  -> "single_file_inside.%s";
             case MULTIPLE -> "multiple_files_inside.%s";
             case SINGLE_ENCR_LIST -> "encr_file_list-single_file.%s";
@@ -73,7 +79,7 @@ class SevenZipBindingsHandlerTest {
 
     private void doTestWithFilesInside(String format, int nrFilesInside, FileType type) throws ExtractionException, WrongPassException, IOException {
         //GIVEN
-        File archiveFile = new File(classLoader.getResource(String.format("test_data/" + getArchiveMask(type), format)).getFile());
+        File archiveFile = new File(classLoader.getResource(String.format("test_data/" + getArchiveMask(type, format), format)).getFile());
 
         //WHEN
         boolean extractionResult = false;
@@ -92,7 +98,7 @@ class SevenZipBindingsHandlerTest {
             File extractedFile = tempDir.resolve(String.format(getFileInsideMask(type), format, i)).toFile();
             assertTrue(extractedFile.exists(), "Extracted file should exist");
             if (type == FileType.MULTIPART_SINGLE) {
-                var referenceFile = new File(classLoader.getResource(String.format("test_data/" + getFileInsideMask(type), format)).getFile());
+                var referenceFile = new File(classLoader.getResource("test_data/multipart_single_file.txt").getFile());
                 assertTrue(areOfSameContent(extractedFile, referenceFile), "Archived long txt file should preserve its content");
             } else {
                 List<String> lines = FileUtils.readLines(extractedFile, Charset.defaultCharset());
@@ -128,6 +134,12 @@ class SevenZipBindingsHandlerTest {
     }
 
     @Test
+    void extractAll_pw_prot_rar_single_file_inside_multiple_archives() throws ExtractionException, WrongPassException, IOException {
+        this.archivePassword = "12345";
+        this.doTestWithFilesInside("rar", 1, FileType.MULTIPART_SINGLE);
+    }
+
+    @Test
     void extractAll_pw_prot_7z_encr_file_list_single_file_inside() throws ExtractionException, WrongPassException, IOException {
         this.doTestWithFilesInside("7z", 1, FileType.SINGLE_ENCR_LIST);
     }
@@ -154,7 +166,7 @@ class SevenZipBindingsHandlerTest {
 
     private void doTestWrongPassException(String format, FileType type) {
         //GIVEN
-        File archiveFile = new File(classLoader.getResource(String.format("test_data/" + getArchiveMask(type), format)).getFile());
+        File archiveFile = new File(classLoader.getResource(String.format("test_data/" + getArchiveMask(type, format), format)).getFile());
 
         //WHEN
         assertThrows(WrongPassException.class, () -> {
