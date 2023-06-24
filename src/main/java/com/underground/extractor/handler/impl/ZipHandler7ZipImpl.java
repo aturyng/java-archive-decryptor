@@ -1,9 +1,7 @@
 package com.underground.extractor.handler.impl;
 
-import com.underground.extractor.handler.RarHandler;
-import com.underground.extractor.handler.SevenZipHandler;
+import com.underground.extractor.handler.IArchiveExtractor;
 import com.underground.extractor.handler.WrongPassException;
-import com.underground.extractor.handler.ZipHandler;
 import jakarta.annotation.PostConstruct;
 import net.sf.sevenzipjbinding.*;
 import net.sf.sevenzipjbinding.impl.RandomAccessFileInStream;
@@ -13,13 +11,19 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.RandomAccessFile;
 
 @Component
-public class ZipHandler7ZipImpl implements ZipHandler, SevenZipHandler, RarHandler {
+public class ZipHandler7ZipImpl implements IArchiveExtractor {
 
-    Logger logger = LoggerFactory.getLogger(ZipHandler7ZipImpl.class);
     public static final String EXCEPTION_MSG_WRONG_PASS = "Custom: WRONG_PASSWORD";
+    public File outputDirectoryFile;
+    Logger logger = LoggerFactory.getLogger(ZipHandler7ZipImpl.class);
+    private String archive;
+    private String outputDirectory;
 
     @PostConstruct
     public void afterInit() {
@@ -30,11 +34,6 @@ public class ZipHandler7ZipImpl implements ZipHandler, SevenZipHandler, RarHandl
             e.printStackTrace();
         }
     }
-
-    private String archive;
-    private String outputDirectory;
-    public File outputDirectoryFile;
-
 
     private void prepareOutputDirectory() {
         outputDirectoryFile = new File(outputDirectory);
@@ -50,7 +49,7 @@ public class ZipHandler7ZipImpl implements ZipHandler, SevenZipHandler, RarHandl
     }
 
     private void doExtract(String password, IInStream streamProcessor, IArchiveOpenCallback callback) throws ExtractionException, WrongPassException {
-        IInArchive inArchive = null;
+        IInArchive inArchive;
         try {
             if (callback != null) {
                 inArchive = SevenZip.openInArchive(null, streamProcessor, callback);
